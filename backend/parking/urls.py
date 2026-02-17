@@ -1,6 +1,7 @@
-"""URL routing for the parking API."""
 from django.urls import path
 
+from . import views
+
 urlpatterns = [
-    # API endpoints will be added in Phase 3
+    path('telemetry/', views.TelemetryCreateView.as_view(), name='telemetry-create'),
 ]
