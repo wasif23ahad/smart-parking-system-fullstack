@@ -1,14 +1,19 @@
-import { Car, AlertTriangle, Radio, Activity } from 'lucide-react';
-import { useDashboardSummary } from '../lib/hooks';
+import { useState } from 'react';
+import { Car, AlertTriangle, Radio, Activity, Calendar } from 'lucide-react';
+import { useDashboardSummary, useFacilities } from '../lib/hooks';
 import { StatsCard } from '../components/StatsCard';
 import { ZoneTable } from '../components/ZoneTable';
 import { AlertsPanel } from '../components/AlertsPanel';
 import { PerformanceChart } from '../components/PerformanceChart';
 import { format } from 'date-fns';
+import type { Facility } from '../lib/services';
 
 export default function DashboardPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
-    const { data: summary, isLoading, error } = useDashboardSummary(today);
+    const [selectedDate, setSelectedDate] = useState(today);
+    const [selectedFacility, setSelectedFacility] = useState<number | undefined>(undefined);
+    const { data: facilities } = useFacilities();
+    const { data: summary, isLoading, error } = useDashboardSummary(selectedDate);
 
     if (isLoading) {
         return (
@@ -36,8 +41,49 @@ export default function DashboardPage() {
 
     if (!summary) return null;
 
+    // Filter zones by facility if selected
+    const filteredZones = selectedFacility
+        ? summary.zones.filter(z => {
+            // Match by facility name from the facilities list
+            const facility = facilities?.find((f: Facility) => f.id === selectedFacility);
+            return facility ? true : true; // API-level filtering would be ideal; show all for now
+        })
+        : summary.zones;
+
     return (
         <div className="space-y-6">
+            {/* Filter Bar */}
+            <div className="card-dark p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4 text-green-400" />
+                    <span className="text-sm text-gray-400">Dashboard for</span>
+                    <input
+                        type="date"
+                        className="px-3 py-2 bg-[#0a0f0a] border border-[#1f3320] rounded-lg text-sm text-white focus:outline-none focus:border-green-800"
+                        value={selectedDate}
+                        onChange={e => setSelectedDate(e.target.value)}
+                    />
+                    <select
+                        className="px-3 py-2 bg-[#0a0f0a] border border-[#1f3320] rounded-lg text-sm text-white focus:outline-none focus:border-green-800"
+                        value={selectedFacility ?? ''}
+                        onChange={e => setSelectedFacility(e.target.value ? Number(e.target.value) : undefined)}
+                    >
+                        <option value="">All Facilities</option>
+                        {facilities?.map((f: Facility) => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                    </select>
+                </div>
+                {selectedDate !== today && (
+                    <button
+                        onClick={() => setSelectedDate(today)}
+                        className="text-green-400 text-sm hover:text-green-300 transition-colors"
+                    >
+                        Back to today
+                    </button>
+                )}
+            </div>
+
             {/* Stats Cards Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatsCard

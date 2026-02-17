@@ -1,14 +1,20 @@
-import { useState } from 'react';
-import { useDevices, useZones } from '../lib/hooks';
-import { Search, RefreshCw, Cpu, MoreVertical } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useDevices, useZones, useFacilities } from '../lib/hooks';
+import { Search, RefreshCw, Cpu, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../lib/utils';
+import type { Device, Facility } from '../lib/services';
+
+type SortDir = 'asc' | 'desc';
 
 export default function MonitoringPage() {
     const [search, setSearch] = useState('');
+    const [selectedFacility, setSelectedFacility] = useState<number | undefined>(undefined);
     const [selectedZone, setSelectedZone] = useState<number | undefined>(undefined);
     const [showActiveOnly, setShowActiveOnly] = useState(false);
+    const [sortCol, setSortCol] = useState<string>('');
+    const [sortDir, setSortDir] = useState<SortDir>('asc');
 
     const { data: devices, isLoading, isRefetching } = useDevices({
         search: search || undefined,
@@ -16,7 +22,39 @@ export default function MonitoringPage() {
         active: showActiveOnly ? true : undefined,
     });
 
-    const { data: zones } = useZones();
+    const { data: facilities } = useFacilities();
+    const { data: zones } = useZones(selectedFacility);
+
+    // --- Sorting ---
+    const toggleSort = (col: string) => {
+        if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortCol(col); setSortDir('asc'); }
+    };
+
+    const SortIcon = ({ col }: { col: string }) => {
+        if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 text-gray-600" />;
+        return sortDir === 'asc'
+            ? <ArrowUp className="w-3 h-3 text-green-400" />
+            : <ArrowDown className="w-3 h-3 text-green-400" />;
+    };
+
+    const sortedDevices = useMemo(() => {
+        if (!devices) return [];
+        let rows = [...devices];
+        // Filter by facility on the client side
+        if (selectedFacility) {
+            const facility = facilities?.find((f: Facility) => f.id === selectedFacility);
+            if (facility) rows = rows.filter(d => d.facility_name === facility.name);
+        }
+        if (!sortCol) return rows;
+        return rows.sort((a, b) => {
+            const va = (a as Record<string, unknown>)[sortCol];
+            const vb = (b as Record<string, unknown>)[sortCol];
+            if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
+            if (typeof va === 'boolean' && typeof vb === 'boolean') return sortDir === 'asc' ? (va === vb ? 0 : va ? -1 : 1) : (va === vb ? 0 : va ? 1 : -1);
+            return sortDir === 'asc' ? String(va ?? '').localeCompare(String(vb ?? '')) : String(vb ?? '').localeCompare(String(va ?? ''));
+        });
+    }, [devices, selectedFacility, facilities, sortCol, sortDir]);
 
     const getHealthColor = (score: number) => {
         if (score >= 80) return 'bg-green-500';
@@ -48,7 +86,7 @@ export default function MonitoringPage() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
                         <input
@@ -62,7 +100,18 @@ export default function MonitoringPage() {
 
                     <select
                         className="px-4 py-2 bg-[#0a0f0a] border border-[#1f3320] rounded-lg text-sm text-white focus:outline-none focus:border-green-800"
-                        value={selectedZone || ''}
+                        value={selectedFacility ?? ''}
+                        onChange={(e) => { setSelectedFacility(e.target.value ? Number(e.target.value) : undefined); setSelectedZone(undefined); }}
+                    >
+                        <option value="">All Facilities</option>
+                        {facilities?.map((f: Facility) => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                    </select>
+
+                    <select
+                        className="px-4 py-2 bg-[#0a0f0a] border border-[#1f3320] rounded-lg text-sm text-white focus:outline-none focus:border-green-800"
+                        value={selectedZone ?? ''}
                         onChange={(e) => setSelectedZone(e.target.value ? Number(e.target.value) : undefined)}
                     >
                         <option value="">All Zones</option>
@@ -91,12 +140,25 @@ export default function MonitoringPage() {
                     <table className="w-full">
                         <thead>
                             <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-[#1f3320]">
-                                <th className="px-6 py-4 font-medium">Device ID</th>
-                                <th className="px-6 py-4 font-medium">Location</th>
-                                <th className="px-6 py-4 font-medium">Status</th>
-                                <th className="px-6 py-4 font-medium">Health Score</th>
-                                <th className="px-6 py-4 font-medium">Last Seen</th>
-                                <th className="px-6 py-4 font-medium">Installed</th>
+                                {[
+                                    { key: 'device_code', label: 'Device ID' },
+                                    { key: 'zone_name', label: 'Location' },
+                                    { key: 'is_active', label: 'Status' },
+                                    { key: 'health_score', label: 'Health Score' },
+                                    { key: 'last_seen_at', label: 'Last Seen' },
+                                    { key: 'installed_at', label: 'Installed' },
+                                ].map(col => (
+                                    <th
+                                        key={col.key}
+                                        className="px-6 py-4 font-medium cursor-pointer select-none hover:text-gray-300"
+                                        onClick={() => toggleSort(col.key)}
+                                    >
+                                        <span className="flex items-center gap-1">
+                                            {col.label}
+                                            <SortIcon col={col.key} />
+                                        </span>
+                                    </th>
+                                ))}
                                 <th className="px-6 py-4 font-medium text-right">Actions</th>
                             </tr>
                         </thead>
@@ -107,7 +169,7 @@ export default function MonitoringPage() {
                                         Loading devices...
                                     </td>
                                 </tr>
-                            ) : devices?.map((device) => {
+                            ) : sortedDevices?.map((device) => {
                                 const statusColor = getStatusColor(device.is_active, device.last_seen_at);
                                 return (
                                     <tr key={device.id} className="hover:bg-[#0d150d] transition-colors">
@@ -158,7 +220,7 @@ export default function MonitoringPage() {
                                     </tr>
                                 );
                             })}
-                            {!isLoading && devices?.length === 0 && (
+                            {!isLoading && sortedDevices?.length === 0 && (
                                 <tr>
                                     <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                                         No devices found matching your criteria.
