@@ -75,10 +75,13 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                 />
                             </div>
 
-                            <button className="p-2 text-gray-400 hover:text-white hover:bg-[#111a11] rounded-lg transition-colors relative">
+                            <Link 
+                                to="/alerts" 
+                                className="p-2 text-gray-400 hover:text-white hover:bg-[#111a11] rounded-lg transition-colors relative"
+                            >
                                 <Bell className="w-5 h-5" />
                                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                            </button>
+                            </Link>
 
                             <button className="p-2 text-gray-400 hover:text-white hover:bg-[#111a11] rounded-lg transition-colors">
                                 <Settings className="w-5 h-5" />
