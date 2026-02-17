@@ -164,7 +164,7 @@ export default function ReportsPage() {
                                         <CartesianGrid strokeDasharray="3 3" stroke="#1f3320" vertical={false} />
                                         <XAxis
                                             dataKey="hour"
-                                            tickFormatter={(val) => val?.split(':')[0] || val}
+                                            tickFormatter={(val) => typeof val === 'string' ? (val.split(':')[0] || val) : String(val)}
                                             stroke="#6b7280"
                                             fontSize={11}
                                             tickLine={false}
