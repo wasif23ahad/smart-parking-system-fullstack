@@ -40,7 +40,10 @@ class TelemetrySerializer(serializers.Serializer):
         return value
 
     def validate_timestamp(self, value):
-        if value > timezone.now():
+        from datetime import timedelta
+
+        # Allow up to 5 minutes of clock skew (common for IoT devices)
+        if value > timezone.now() + timedelta(minutes=5):
             raise serializers.ValidationError("Timestamp cannot be in the future.")
         return value
 
@@ -153,7 +156,10 @@ class ParkingLogSerializer(serializers.Serializer):
         return value
 
     def validate_timestamp(self, value):
-        if value > timezone.now():
+        from datetime import timedelta
+
+        # Allow up to 5 minutes of clock skew (common for IoT devices)
+        if value > timezone.now() + timedelta(minutes=5):
             raise serializers.ValidationError("Timestamp cannot be in the future.")
         return value
 
