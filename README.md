@@ -2,9 +2,13 @@
 
 A full-stack IoT-enabled car parking system with real-time monitoring, alerts, and analytics.
 
-![Screenshot](frontend/public/vite.svg) *Add actual screenshots here*
+![Screenshot](frontend/public/Frontend.png)
 
-## 🚀 Features
+## � Documentation
+
+- **[📖 API Documentation](API_DOCUMENTATION.md)** - Complete API reference with endpoints, request/response formats, and examples
+
+## �🚀 Features
 
 ### Backend (Django + DRF)
 - **RESTful APIs** for Facilities, Zones, Devices, and Alerts.
