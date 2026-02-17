@@ -22,9 +22,6 @@ media/
 staticfiles/
 static_collected/
 
-# Migrations (optional — keep if you want)
-# backend/parking/migrations/
-
 # ─── Node / React ─────────────────────────────────
 node_modules/
 frontend/dist/

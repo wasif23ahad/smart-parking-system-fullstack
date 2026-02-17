@@ -60,3 +60,41 @@ class TelemetrySerializer(serializers.Serializer):
         device.save(update_fields=['last_seen_at'])
 
         return telemetry
+
+
+class BulkTelemetrySerializer(serializers.Serializer):
+    """
+    Validates and creates multiple telemetry records.
+    Accepts a list of telemetry payloads, validates each one,
+    creates valid records, and returns a summary.
+    """
+
+    def to_internal_value(self, data):
+        if not isinstance(data, list):
+            raise serializers.ValidationError('Expected a list of telemetry records.')
+        if len(data) == 0:
+            raise serializers.ValidationError('The list cannot be empty.')
+        return data
+
+    def create(self, validated_data):
+        created = []
+        errors = []
+
+        for index, record in enumerate(validated_data):
+            serializer = TelemetrySerializer(data=record)
+            if serializer.is_valid():
+                telemetry = serializer.save()
+                created.append({
+                    'device_code': telemetry.device.device_code,
+                    'timestamp': str(telemetry.timestamp),
+                    'power_consumption': telemetry.power_consumption,
+                })
+            else:
+                errors.append({
+                    'index': index,
+                    'data': record,
+                    'errors': serializer.errors,
+                })
+
+        return {'created': created, 'errors': errors}
+

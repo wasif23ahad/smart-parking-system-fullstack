@@ -15,7 +15,7 @@ This system simulates a real-world parking facility where multiple parking zones
 | Styling | Tailwind CSS |
 | Charts | Recharts |
 | Data Fetching | Axios, React Query (@tanstack/react-query) |
-| Database | SQLite (development) |
+| Database | PostgreSQL |
 
 ## Project Structure
 

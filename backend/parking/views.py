@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import TelemetrySerializer
+from .serializers import TelemetrySerializer, BulkTelemetrySerializer
 
 
 class TelemetryCreateView(APIView):
@@ -22,6 +22,32 @@ class TelemetryCreateView(APIView):
                     'device_code': telemetry.device.device_code,
                     'power_consumption': telemetry.power_consumption,
                     'timestamp': telemetry.timestamp,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(
+            {'status': 'error', 'errors': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class BulkTelemetryCreateView(APIView):
+    """
+    POST /api/telemetry/bulk/
+    Ingest multiple telemetry records at once.
+    """
+
+    def post(self, request):
+        serializer = BulkTelemetrySerializer(data=request.data)
+        if serializer.is_valid():
+            result = serializer.save()
+            return Response(
+                {
+                    'status': 'success',
+                    'created_count': len(result['created']),
+                    'failed_count': len(result['errors']),
+                    'created': result['created'],
+                    'errors': result['errors'],
                 },
                 status=status.HTTP_201_CREATED,
             )
