@@ -129,13 +129,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
             {/* Footer */}
             <footer className="border-t border-[#1f3320] px-6 py-4 mt-8">
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>© 2024 PARKSMART SYSTEMS V2.4.1</span>
-                    <div className="flex items-center gap-6">
-                        <a href="#" className="hover:text-green-400 transition-colors">DOCUMENTATION</a>
-                        <a href="#" className="hover:text-green-400 transition-colors">API STATUS</a>
-                        <a href="#" className="hover:text-green-400 transition-colors">SUPPORT</a>
-                    </div>
+                <div className="text-center text-xs text-gray-500">
+                    <span>© 2026 SmartPark. All Rights Reserved</span>
                 </div>
             </footer>
         </div>
