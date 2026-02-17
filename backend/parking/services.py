@@ -6,7 +6,7 @@ from django.utils import timezone
 from .models import Alert, Device, TelemetryData
 
 # ── Thresholds ────────────────────────────────────────
-OFFLINE_TIMEOUT_MINUTES = 5
+OFFLINE_TIMEOUT_MINUTES = 2
 HIGH_POWER_THRESHOLD_WATTS = 1500
 MIN_VOLTAGE_THRESHOLD = 100
 MAX_VOLTAGE_THRESHOLD = 300
