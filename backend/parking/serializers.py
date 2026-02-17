@@ -59,6 +59,10 @@ class TelemetrySerializer(serializers.Serializer):
         device.last_seen_at = validated_data['timestamp']
         device.save(update_fields=['last_seen_at'])
 
+        # Run alert detections
+        from .services import run_all_detections
+        telemetry.alerts_triggered = run_all_detections(telemetry)
+
         return telemetry
 
 
