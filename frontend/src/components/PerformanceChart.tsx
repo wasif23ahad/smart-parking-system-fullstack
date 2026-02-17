@@ -1,5 +1,5 @@
 import { useDashboardHourly } from '../lib/hooks';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { useState, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, Line, ComposedChart } from 'recharts';
 
@@ -11,12 +11,6 @@ interface TooltipProps {
 
 interface PerformanceChartProps {
     zoneId?: number;
-}
-
-// Generate consistent pseudo-random data based on index
-function generateConsistentData(index: number, base: number, range: number): number {
-    const seed = (index * 17 + 13) % 100;
-    return Math.floor(base + (seed / 100) * range);
 }
 
 // Custom tooltip component - defined outside to avoid recreation during render
@@ -38,16 +32,25 @@ function ChartTooltip({ active, payload, label }: TooltipProps) {
 
 export function PerformanceChart({ zoneId }: PerformanceChartProps) {
     const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const { data: hourlyData, isLoading } = useDashboardHourly(today, zoneId);
+    const today = new Date();
 
-    // Transform data for chart - add target and last week comparison
+    // Compute the target date based on selected range
+    const targetDate = useMemo(() => {
+        if (timeRange === 'week') return format(subDays(today, 7), 'yyyy-MM-dd');
+        if (timeRange === 'month') return format(subDays(today, 30), 'yyyy-MM-dd');
+        return format(today, 'yyyy-MM-dd');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [timeRange]);
+
+    const { data: hourlyData, isLoading } = useDashboardHourly(targetDate, zoneId);
+
+    // Transform API data for chart — all values come from the backend
     const chartData = useMemo(() => {
-        return hourlyData?.map((item, index) => ({
-            time: item.hour || `${index.toString().padStart(2, '0')}:00`,
-            actual: item.occupied_count || 0,
-            target: generateConsistentData(index, 60, 20),
-            lastWeek: generateConsistentData(index + 100, 50, 25),
+        return hourlyData?.map((item) => ({
+            time: item.label ?? `${String(item.hour).padStart(2, '0')}:00`,
+            actual: item.occupied_events ?? 0,
+            target: item.target ?? 0,
+            lastWeek: item.last_week ?? 0,
         })) || [];
     }, [hourlyData]);
 
@@ -56,7 +59,7 @@ export function PerformanceChart({ zoneId }: PerformanceChartProps) {
             <div className="px-6 py-4 border-b border-[#1f3320] flex items-center justify-between">
                 <div>
                     <h3 className="text-white font-semibold">Performance Visualization</h3>
-                    <p className="text-gray-500 text-sm mt-0.5">Hourly Usage vs Dynamic Target</p>
+                    <p className="text-gray-500 text-sm mt-0.5">Hourly Usage vs Target & Last Week</p>
                 </div>
                 <div className="flex items-center gap-1 bg-[#0a0f0a] rounded-lg p-1">
                     {(['today', 'week', 'month'] as const).map((range) => (
@@ -117,7 +120,7 @@ export function PerformanceChart({ zoneId }: PerformanceChartProps) {
                                     stroke="#22c55e"
                                     strokeWidth={2}
                                     fill="url(#actualGradient)"
-                                    name="Actual Occupancy"
+                                    name="Actual Usage"
                                     dot={false}
                                     activeDot={{ r: 4, fill: '#22c55e' }}
                                 />
@@ -128,7 +131,7 @@ export function PerformanceChart({ zoneId }: PerformanceChartProps) {
                                     strokeWidth={1.5}
                                     strokeDasharray="5 5"
                                     dot={false}
-                                    name="Predicted Target"
+                                    name="Hourly Target"
                                 />
                                 <Line
                                     type="monotone"
@@ -137,7 +140,7 @@ export function PerformanceChart({ zoneId }: PerformanceChartProps) {
                                     strokeWidth={1}
                                     strokeDasharray="3 3"
                                     dot={false}
-                                    name="Last Week Avg"
+                                    name="Last Week"
                                 />
                             </ComposedChart>
                         </ResponsiveContainer>
@@ -152,15 +155,15 @@ export function PerformanceChart({ zoneId }: PerformanceChartProps) {
                 <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-[#1f3320]">
                     <div className="flex items-center gap-2">
                         <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                        <span className="text-gray-400 text-xs">Actual Occupancy</span>
+                        <span className="text-gray-400 text-xs">Actual Usage</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="w-3 h-0.5 bg-blue-500 border-dashed"></span>
-                        <span className="text-gray-400 text-xs">Predicted Target</span>
+                        <span className="text-gray-400 text-xs">Hourly Target</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="w-3 h-0.5 bg-gray-500"></span>
-                        <span className="text-gray-400 text-xs">Last Week Avg</span>
+                        <span className="text-gray-400 text-xs">Last Week</span>
                     </div>
                 </div>
             </div>

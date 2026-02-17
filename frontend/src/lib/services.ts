@@ -79,9 +79,11 @@ export interface DashboardSummary {
 }
 
 export interface HourlyUsage {
-    hour: string;
-    occupied_count: number;
-    avg_occupancy: number;
+    hour: number;
+    label: string;
+    occupied_events: number;
+    target: number;
+    last_week: number;
 }
 
 export interface ParkingTarget {

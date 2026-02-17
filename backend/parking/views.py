@@ -439,10 +439,39 @@ class DashboardHourlyView(APIView):
             .order_by("hour")
         )
 
+        # --- Last week's hourly data (same day of week, 7 days ago) ---
+        last_week_date = target_date - datetime.timedelta(days=7)
+        last_week_logs = ParkingLog.objects.filter(timestamp__date=last_week_date)
+        if zone_id:
+            last_week_logs = last_week_logs.filter(device__slot__zone_id=zone_id)
+
+        last_week_hourly = (
+            last_week_logs.filter(is_occupied=True)
+            .annotate(hour=ExtractHour("timestamp"))
+            .values("hour")
+            .annotate(count=Count("id"))
+            .order_by("hour")
+        )
+        last_week_map = {item["hour"]: item["count"] for item in last_week_hourly}
+
+        # --- Target per hour (daily target spread evenly across 24 hours) ---
+        target_filters = {"date": target_date}
+        if zone_id:
+            target_filters["zone_id"] = zone_id
+        targets = ParkingTarget.objects.filter(**target_filters)
+        total_target = sum(t.target_occupancy_count for t in targets)
+        target_per_hour = round(total_target / 24, 1) if total_target > 0 else 0
+
         # Build full 24-hour array
         hourly_map = {item["hour"]: item["count"] for item in hourly}
         data = [
-            {"hour": h, "label": f"{h:02d}:00", "occupied_events": hourly_map.get(h, 0)}
+            {
+                "hour": h,
+                "label": f"{h:02d}:00",
+                "occupied_events": hourly_map.get(h, 0),
+                "target": target_per_hour,
+                "last_week": last_week_map.get(h, 0),
+            }
             for h in range(24)
         ]
 
