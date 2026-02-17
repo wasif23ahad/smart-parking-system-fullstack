@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, AlertTriangle, FileText, Cpu, Search, Bell, Settings, Radio } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, FileText, Cpu, Search, Bell, Radio } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
 
@@ -83,12 +83,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                             </Link>
 
-                            <button className="p-2 text-gray-400 hover:text-white hover:bg-[#111a11] rounded-lg transition-colors">
-                                <Settings className="w-5 h-5" />
-                            </button>
-
                             <div className="w-9 h-9 rounded-full bg-linear-to-br from-green-500 to-green-700 flex items-center justify-center">
-                                <span className="text-black font-semibold text-sm">W</span>
+                                <span className="text-black font-semibold text-sm">A</span>
                             </div>
                         </div>
                     </div>
