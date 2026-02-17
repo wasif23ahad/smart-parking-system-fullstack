@@ -1,7 +1,10 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Device, TelemetryData, ParkingLog, Alert
+from .models import (
+    Device, TelemetryData, ParkingLog, Alert,
+    ParkingFacility, ParkingZone, ParkingSlot,
+)
 
 
 class TelemetrySerializer(serializers.Serializer):
@@ -163,5 +166,54 @@ class AlertSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'device_code', 'zone_name', 'alert_type', 'severity',
             'message', 'is_acknowledged', 'acknowledged_at', 'created_at',
+        ]
+
+
+class FacilitySerializer(serializers.ModelSerializer):
+    zone_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ParkingFacility
+        fields = ['id', 'name', 'address', 'is_active', 'zone_count', 'created_at']
+
+    def get_zone_count(self, obj):
+        return obj.zones.count()
+
+
+class ZoneSerializer(serializers.ModelSerializer):
+    facility_name = serializers.CharField(source='facility.name', read_only=True)
+    occupied_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ParkingZone
+        fields = [
+            'id', 'name', 'facility_name', 'zone_type', 'total_slots',
+            'occupied_count', 'is_active', 'created_at',
+        ]
+
+    def get_occupied_count(self, obj):
+        """Count slots with latest parking log showing is_occupied=True."""
+        count = 0
+        for slot in obj.slots.filter(is_active=True).select_related('device'):
+            device = getattr(slot, 'device', None)
+            if device:
+                last_log = device.parking_logs.first()  # ordered by -timestamp
+                if last_log and last_log.is_occupied:
+                    count += 1
+        return count
+
+
+class DeviceSerializer(serializers.ModelSerializer):
+    slot_number = serializers.CharField(source='slot.slot_number', read_only=True)
+    zone_name = serializers.CharField(source='slot.zone.name', read_only=True)
+    zone_id = serializers.IntegerField(source='slot.zone.id', read_only=True)
+    facility_name = serializers.CharField(source='slot.zone.facility.name', read_only=True)
+
+    class Meta:
+        model = Device
+        fields = [
+            'id', 'device_code', 'slot_number', 'zone_name', 'zone_id',
+            'facility_name', 'is_active', 'health_score', 'last_seen_at',
+            'installed_at',
         ]
 

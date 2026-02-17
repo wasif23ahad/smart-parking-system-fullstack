@@ -6,8 +6,9 @@ from .serializers import (
     TelemetrySerializer, BulkTelemetrySerializer,
     ParkingLogSerializer, ParkingLogListSerializer,
     AlertSerializer,
+    FacilitySerializer, ZoneSerializer, DeviceSerializer,
 )
-from .models import ParkingLog, Alert
+from .models import ParkingLog, Alert, ParkingFacility, ParkingZone, Device
 
 
 class TelemetryCreateView(APIView):
@@ -174,3 +175,52 @@ class AlertAcknowledgeView(APIView):
             'alert_id': alert.id,
             'acknowledged_at': alert.acknowledged_at,
         })
+
+
+class FacilityListView(APIView):
+    """GET /api/facilities/ — List parking facilities."""
+
+    def get(self, request):
+        facilities = ParkingFacility.objects.prefetch_related('zones').all()
+        serializer = FacilitySerializer(facilities, many=True)
+        return Response(serializer.data)
+
+
+class ZoneListView(APIView):
+    """GET /api/zones/ — List zones with optional facility filter."""
+
+    def get(self, request):
+        zones = ParkingZone.objects.select_related('facility').prefetch_related(
+            'slots', 'slots__device', 'slots__device__parking_logs'
+        ).all()
+
+        facility_id = request.query_params.get('facility')
+        if facility_id:
+            zones = zones.filter(facility_id=facility_id)
+
+        serializer = ZoneSerializer(zones, many=True)
+        return Response(serializer.data)
+
+
+class DeviceListView(APIView):
+    """GET /api/devices/ — List devices with optional zone, active, and search filters."""
+
+    def get(self, request):
+        devices = Device.objects.select_related(
+            'slot', 'slot__zone', 'slot__zone__facility'
+        ).all()
+
+        zone_id = request.query_params.get('zone')
+        if zone_id:
+            devices = devices.filter(slot__zone_id=zone_id)
+
+        active = request.query_params.get('active')
+        if active is not None:
+            devices = devices.filter(is_active=active.lower() == 'true')
+
+        search = request.query_params.get('search')
+        if search:
+            devices = devices.filter(device_code__icontains=search)
+
+        serializer = DeviceSerializer(devices, many=True)
+        return Response(serializer.data)

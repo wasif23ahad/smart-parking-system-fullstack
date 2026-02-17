@@ -9,4 +9,7 @@ urlpatterns = [
     path('parking-logs/', views.ParkingLogListView.as_view(), name='parking-log-list'),
     path('alerts/', views.AlertListView.as_view(), name='alert-list'),
     path('alerts/<int:pk>/acknowledge/', views.AlertAcknowledgeView.as_view(), name='alert-acknowledge'),
+    path('facilities/', views.FacilityListView.as_view(), name='facility-list'),
+    path('zones/', views.ZoneListView.as_view(), name='zone-list'),
+    path('devices/', views.DeviceListView.as_view(), name='device-list'),
 ]
