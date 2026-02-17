@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, AlertTriangle, FileText, Cpu, Search, Bell, Radio } from 'lucide-react';
+import { Search, Bell } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
 

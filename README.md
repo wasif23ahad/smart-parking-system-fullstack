@@ -2,6 +2,8 @@
 
 A full-stack parking facility monitoring platform built with **Django + DRF** (Backend) and **React + TypeScript** (Frontend). The system ingests telemetry and occupancy data from IoT devices, detects abnormal conditions, computes efficiency metrics, and presents everything in a real-time monitoring dashboard.
 
+![Frontend Screenshot](frontend/public/Frontend.png)
+
 ---
 
 ## Table of Contents
@@ -25,7 +27,7 @@ A full-stack parking facility monitoring platform built with **Django + DRF** (B
 
 - Python 3.10+
 - Node.js 18+
-- PostgreSQL (or configure SQLite by changing `settings.py`)
+- PostgreSQL **or** SQLite (SQLite requires zero setup — see below)
 
 ### Backend Setup
 
@@ -39,23 +41,52 @@ venv\Scripts\activate        # Windows
 
 # Install dependencies
 pip install -r requirements.txt
+```
 
-# Apply migrations
+#### Option A: Quick Start with SQLite (No Database Setup)
+
+```bash
+# Create .env with SQLite mode
+echo USE_SQLITE=true > .env
+
+# Apply migrations & seed data
 python manage.py migrate
-
-# Seed the database with realistic sample data
 python manage.py seed_data
 
-# Start the development server
+# Start the server
 python manage.py runserver
 ```
 
-The backend runs at **http://localhost:8000**. The seed command creates:
+#### Option B: PostgreSQL
+
+```bash
+# Copy the example env file and fill in your DB credentials
+cp .env.example .env        # macOS/Linux
+copy .env.example .env      # Windows
+
+# Edit .env with your PostgreSQL credentials:
+#   DB_NAME=your_db_name
+#   DB_USER=your_db_user
+#   DB_PASSWORD=your_db_password
+#   DB_HOST=localhost
+#   DB_PORT=5432
+
+# Apply migrations & seed data
+python manage.py migrate
+python manage.py seed_data
+
+# Start the server
+python manage.py runserver
+```
+
+The backend runs at **http://localhost:8000**. The seed command populates the database so the dashboard has data to display:
 - 1 Facility ("City Center Mall Parking"), 4 Zones, 50 Slots/Devices
 - ~14,400 telemetry records (24 hours × 288 intervals × 50 devices)
 - Random parking log events (3–12 per device)
 - Daily targets for today and yesterday across all zones
 - 5 sample alerts (DEVICE_OFFLINE, HIGH_POWER, INVALID_DATA, LOW_HEALTH — including 1 acknowledged)
+
+> **Note:** The seed data is a database seeder (standard in Django/Rails/Laravel) — not hardcoded or mock data. All application code reads from the database via real API endpoints. The system works identically with live IoT data sent via `POST /api/telemetry/`.
 
 ### Frontend Setup
 
@@ -73,17 +104,19 @@ The frontend runs at **http://localhost:5173**.
 
 ### Environment Variables (Optional)
 
-The backend reads database credentials from environment variables (or `.env` file in the `backend/` directory):
+The backend reads configuration from a `.env` file in the `backend/` directory. See `backend/.env.example` for all options.
+
+**Quickest path:** Just set `USE_SQLITE=true` in your `.env` — no database installation required.
+
+For PostgreSQL, configure these variables:
 
 ```env
-DB_NAME=neondb
-DB_USER=neondb_owner
+DB_NAME=smart_parking
+DB_USER=postgres
 DB_PASSWORD=your_password
-DB_HOST=your_host
+DB_HOST=localhost
 DB_PORT=5432
 ```
-
-If no `.env` is provided, fallback values in `settings.py` are used.
 
 ---
 
@@ -101,8 +134,8 @@ If no `.env` is provided, fallback values in `settings.py` are used.
 └──────────────────────┘         └──────────┬───────────┘
                                             │
                                  ┌──────────▼───────────┐
-                                 │   PostgreSQL DB       │
-                                 │   (Neon / Local)      │
+                                 │   PostgreSQL / SQLite │
+                                 │   (configurable)      │
                                  └──────────────────────┘
 ```
 
@@ -307,12 +340,12 @@ The key architectural shift is from **synchronous request-response** to **event-
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Django 4.2, Django REST Framework |
+| Backend | Django 6.0, Django REST Framework |
 | Frontend | React 19, TypeScript, Vite 7 |
 | Styling | Tailwind CSS 4 |
 | Charts | Recharts (ComposedChart, Area, Line) |
 | State/Data | TanStack React Query (10s polling) |
-| Database | PostgreSQL (Neon cloud) |
+| Database | PostgreSQL or SQLite (configurable via `.env`) |
 | Export | jsPDF + jspdf-autotable, xlsx, file-saver |
 | Icons | Lucide React |
 | Dates | date-fns |
@@ -328,6 +361,7 @@ smart-parking-system/
 ├── backend/
 │   ├── manage.py
 │   ├── requirements.txt
+│   ├── .env.example             # Environment config template
 │   ├── config/                  # Django settings, URLs, WSGI
 │   │   ├── settings.py
 │   │   ├── urls.py

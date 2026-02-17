@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useDevices, useZones, useFacilities } from '../lib/hooks';
 import { Search, RefreshCw, Cpu, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { StatusBadge } from '../components/StatusBadge';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../lib/utils';
-import type { Device, Facility } from '../lib/services';
+import type { Facility } from '../lib/services';
 
 type SortDir = 'asc' | 'desc';
 
@@ -48,8 +47,8 @@ export default function MonitoringPage() {
         }
         if (!sortCol) return rows;
         return rows.sort((a, b) => {
-            const va = (a as Record<string, unknown>)[sortCol];
-            const vb = (b as Record<string, unknown>)[sortCol];
+            const va = (a as unknown as Record<string, unknown>)[sortCol];
+            const vb = (b as unknown as Record<string, unknown>)[sortCol];
             if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
             if (typeof va === 'boolean' && typeof vb === 'boolean') return sortDir === 'asc' ? (va === vb ? 0 : va ? -1 : 1) : (va === vb ? 0 : va ? 1 : -1);
             return sortDir === 'asc' ? String(va ?? '').localeCompare(String(vb ?? '')) : String(vb ?? '').localeCompare(String(va ?? ''));

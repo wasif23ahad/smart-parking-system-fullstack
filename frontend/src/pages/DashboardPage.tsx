@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Car, AlertTriangle, Radio, Activity, Calendar } from 'lucide-react';
+import { Car, AlertTriangle, Radio, Calendar } from 'lucide-react';
 import { useDashboardSummary, useFacilities } from '../lib/hooks';
 import { StatsCard } from '../components/StatsCard';
 import { ZoneTable } from '../components/ZoneTable';
