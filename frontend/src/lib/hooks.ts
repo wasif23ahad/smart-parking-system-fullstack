@@ -21,12 +21,12 @@ const POLLING_INTERVAL = 10 * 1000;
 
 /**
  * Hook to fetch dashboard summary data
- * PRD: GET /api/dashboard/summary/?date=YYYY-MM-DD
+ * PRD: GET /api/dashboard/summary/?date=YYYY-MM-DD&facility=ID
  */
-export function useDashboardSummary(date?: string) {
+export function useDashboardSummary(date?: string, facility?: number) {
     return useQuery<DashboardSummary>({
-        queryKey: ['dashboardSummary', date],
-        queryFn: () => getDashboardSummary(date),
+        queryKey: ['dashboardSummary', date, facility],
+        queryFn: () => getDashboardSummary(date, facility),
         refetchInterval: POLLING_INTERVAL,
         staleTime: 5000,
     });

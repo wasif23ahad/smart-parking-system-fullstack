@@ -275,15 +275,26 @@ class DashboardSummaryView(APIView):
         else:
             target_date = datetime.date.today()
 
-        # Global counts
-        total_slots = ParkingSlot.objects.filter(is_active=True).count()
-        total_devices = Device.objects.filter(is_active=True).count()
-        avg_health = (
-            Device.objects.filter(is_active=True).aggregate(avg=Avg("health_score"))[
-                "avg"
-            ]
-            or 0
+        # Parse optional facility filter
+        facility_id = request.query_params.get("facility")
+
+        # Base querysets scoped by facility if provided
+        slot_qs = ParkingSlot.objects.filter(is_active=True)
+        device_qs = Device.objects.filter(is_active=True)
+        zone_qs = (
+            ParkingZone.objects.select_related("facility")
+            .prefetch_related("slots", "slots__device", "slots__device__parking_logs")
+            .filter(is_active=True)
         )
+        if facility_id:
+            slot_qs = slot_qs.filter(zone__facility_id=facility_id)
+            device_qs = device_qs.filter(slot__zone__facility_id=facility_id)
+            zone_qs = zone_qs.filter(facility_id=facility_id)
+
+        # Global counts
+        total_slots = slot_qs.count()
+        total_devices = device_qs.count()
+        avg_health = device_qs.aggregate(avg=Avg("health_score"))["avg"] or 0
 
         # ── Total parking events for the date (PRD requirement) ──
         total_parking_events = ParkingLog.objects.filter(
@@ -308,6 +319,8 @@ class DashboardSummaryView(APIView):
         # ── Efficiency Indicators (PRD requirement) ──
         # Get targets for the date
         targets = ParkingTarget.objects.filter(date=target_date).select_related("zone")
+        if facility_id:
+            targets = targets.filter(zone__facility_id=facility_id)
         total_target_usage = 0
         total_actual_usage = 0
 
@@ -333,11 +346,7 @@ class DashboardSummaryView(APIView):
         }
 
         # Zone breakdown
-        zones = (
-            ParkingZone.objects.select_related("facility")
-            .prefetch_related("slots", "slots__device", "slots__device__parking_logs")
-            .filter(is_active=True)
-        )
+        zones = zone_qs
 
         zone_data = []
         total_occupied = 0
@@ -369,6 +378,7 @@ class DashboardSummaryView(APIView):
                     "id": zone.id,
                     "name": zone.name,
                     "zone_type": zone.zone_type,
+                    "facility_name": zone.facility.name,
                     "total_slots": zone.total_slots,
                     "occupied": occupied,
                     "available": zone.total_slots - occupied,

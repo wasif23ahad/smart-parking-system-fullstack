@@ -13,7 +13,7 @@ export default function DashboardPage() {
     const [selectedDate, setSelectedDate] = useState(today);
     const [selectedFacility, setSelectedFacility] = useState<number | undefined>(undefined);
     const { data: facilities } = useFacilities();
-    const { data: summary, isLoading, error } = useDashboardSummary(selectedDate);
+    const { data: summary, isLoading, error } = useDashboardSummary(selectedDate, selectedFacility);
 
     if (isLoading) {
         return (
@@ -40,15 +40,6 @@ export default function DashboardPage() {
     }
 
     if (!summary) return null;
-
-    // Filter zones by facility if selected
-    const filteredZones = selectedFacility
-        ? summary.zones.filter(z => {
-            // Match by facility name from the facilities list
-            const facility = facilities?.find((f: Facility) => f.id === selectedFacility);
-            return facility ? true : true; // API-level filtering would be ideal; show all for now
-        })
-        : summary.zones;
 
     return (
         <div className="space-y-6">
@@ -90,21 +81,18 @@ export default function DashboardPage() {
                     title="Total Parking Events"
                     value={summary.total_parking_events.toLocaleString()}
                     icon={Car}
-                    trend={{ value: '+12.4%', isPositive: true }}
                 />
                 <StatsCard
                     title="Current Occupancy"
                     value={`${summary.occupancy_rate}%`}
                     subValue={`(${summary.total_occupied}/${summary.total_slots})`}
                     icon={Car}
-                    trend={{ value: '+5.2%', isPositive: true }}
                 />
                 <StatsCard
                     title="Active Devices"
                     value={summary.active_devices}
                     subValue={`/${summary.total_slots}`}
                     icon={Radio}
-                    trend={{ value: '-2 units', isPositive: false }}
                 />
                 <StatsCard
                     title="Triggered Alerts"

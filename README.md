@@ -51,11 +51,11 @@ python manage.py runserver
 ```
 
 The backend runs at **http://localhost:8000**. The seed command creates:
-- 1 Facility, 4 Zones, 50 Slots/Devices
-- ~14,400 telemetry records (24 hours × 5-min intervals × 50 devices)
-- ~350 parking log events
-- Daily targets for all zones
-- 5 sample alerts (various types and severities)
+- 1 Facility ("City Center Mall Parking"), 4 Zones, 50 Slots/Devices
+- ~14,400 telemetry records (24 hours × 288 intervals × 50 devices)
+- Random parking log events (3–12 per device)
+- Daily targets for today and yesterday across all zones
+- 5 sample alerts (DEVICE_OFFLINE, HIGH_POWER, INVALID_DATA, LOW_HEALTH — including 1 acknowledged)
 
 ### Frontend Setup
 
@@ -106,46 +106,50 @@ If no `.env` is provided, fallback values in `settings.py` are used.
                                  └──────────────────────┘
 ```
 
+**Data flow:** IoT devices → `POST /api/telemetry/` → Validation → DB write → Inline alert detection → Health score recomputation → Dashboard polling (10s) → React UI.
+
 ---
 
 ## Data Models
 
-| Model | Purpose |
-|-------|---------|
-| **ParkingFacility** | Physical parking site (name, address) |
-| **ParkingZone** | Zone within a facility (Basement-1, VIP, etc.) with zone type |
-| **ParkingSlot** | Individual parking slot within a zone |
-| **Device** | IoT sensor/controller attached to a slot — tracks `health_score`, `last_seen_at` |
-| **TelemetryData** | Time-series voltage/current/power readings from devices |
-| **ParkingLog** | Occupancy state changes (occupied/free) per device |
-| **Alert** | System-generated alerts with severity (INFO/WARNING/CRITICAL) |
-| **ParkingTarget** | Daily target occupancy per zone for efficiency calculation |
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| **ParkingFacility** | Physical parking site | `name`, `address`, `is_active` |
+| **ParkingZone** | Zone within a facility | FK `facility`, `name`, `zone_type` (BASEMENT/OUTDOOR/VIP/ROOFTOP), `total_slots` |
+| **ParkingSlot** | Individual slot within a zone | FK `zone`, `slot_number`, `is_active` |
+| **Device** | IoT sensor attached to a slot | OneToOne `slot`, `device_code` (unique, indexed), `health_score` (0–100), `last_seen_at` |
+| **TelemetryData** | Time-series electrical readings | FK `device`, `voltage`, `current`, `power_factor`, `power_consumption` (computed), `timestamp` |
+| **ParkingLog** | Occupancy state changes | FK `device`, `is_occupied`, `timestamp` |
+| **Alert** | System-generated alerts | FK `device` (nullable), FK `zone` (nullable), `alert_type`, `severity`, `message`, `is_acknowledged` |
+| **ParkingTarget** | Daily target per zone | FK `zone`, `date`, `target_occupancy_count`, `target_usage_hours` |
 
 ### Key Constraints
-- `TelemetryData` has `unique_together = ['device', 'timestamp']` to prevent duplicates
-- `Device.device_code` is globally unique and indexed
-- `ParkingTarget` has `unique_together = ['zone', 'date']`
+- `TelemetryData`: `unique_together = ['device', 'timestamp']` — plus a **1-minute sliding window** duplicate check in the serializer
+- `Device.device_code`: globally unique and indexed
+- `ParkingTarget`: `unique_together = ['zone', 'date']`
+- `ParkingZone`: `unique_together = ['facility', 'name']`
+- `ParkingSlot`: `unique_together = ['zone', 'slot_number']`
 
 ---
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/telemetry/` | Ingest single telemetry record |
-| POST | `/api/telemetry/bulk/` | Ingest multiple telemetry records |
-| POST | `/api/parking-log/` | Record occupancy event |
-| GET | `/api/dashboard/summary/?date=YYYY-MM-DD` | Dashboard aggregate summary |
-| GET | `/api/dashboard/hourly/?date=&zone=` | Hourly parking usage |
-| GET | `/api/alerts/` | List alerts (filter: severity, type, acknowledged) |
-| PATCH | `/api/alerts/<id>/acknowledge/` | Acknowledge a single alert |
-| GET | `/api/facilities/` | List parking facilities |
-| GET | `/api/zones/?facility=` | List zones |
-| GET | `/api/devices/?zone=&active=&search=` | List devices |
-| GET | `/api/parking-logs/?zone=&date=` | List parking logs |
-| GET | `/api/targets/?date=` | List targets with efficiency |
+| Method | Endpoint | Query Parameters | Description |
+|--------|----------|-----------------|-------------|
+| POST | `/api/telemetry/` | — | Ingest single telemetry record |
+| POST | `/api/telemetry/bulk/` | — | Ingest multiple telemetry records |
+| POST | `/api/parking-log/` | — | Record parking occupancy event |
+| GET | `/api/dashboard/summary/` | `date`, `facility` | Dashboard aggregate summary |
+| GET | `/api/dashboard/hourly/` | `date`, `zone` | 24-hour parking usage with target & last week |
+| GET | `/api/alerts/` | `severity`, `type`, `acknowledged` | List alerts |
+| PATCH | `/api/alerts/<id>/acknowledge/` | — | Acknowledge a single alert |
+| GET | `/api/facilities/` | — | List parking facilities |
+| GET | `/api/zones/` | `facility` | List zones |
+| GET | `/api/devices/` | `zone`, `active`, `search` | List devices |
+| GET | `/api/parking-logs/` | `zone`, `date` | List parking logs |
+| GET | `/api/targets/` | `date` | List targets with efficiency |
 
-Full API documentation is available in [API_DOCUMENTATION.md](API_DOCUMENTATION.md).
+Full API documentation with request/response examples is available in [API_DOCUMENTATION.md](API_DOCUMENTATION.md).
 
 ---
 
@@ -153,86 +157,89 @@ Full API documentation is available in [API_DOCUMENTATION.md](API_DOCUMENTATION.
 
 ### Alert Detection
 
-Alerts are triggered inline after each telemetry ingestion and via periodic checks:
+Alerts are triggered inline after each telemetry ingestion (`run_all_detections`) and via a manual/scheduled scan (`detect_offline_devices`):
 
-| Alert Type | Condition | Severity |
-|------------|-----------|----------|
-| **Device Offline** | No data received for > 2 minutes | CRITICAL |
-| **High Power** | Power consumption > 1,500W | WARNING |
-| **Invalid Data** | Voltage outside 100–300V range | WARNING |
-| **Low Health** | Device health score < 30 | INFO |
+| Alert Type | Condition | Severity | Trigger |
+|------------|-----------|----------|---------|
+| **DEVICE_OFFLINE** | No data received for > 2 minutes | CRITICAL | `detect_offline_devices()` |
+| **HIGH_POWER** | `power_consumption` > 1,500W | WARNING | Inline after telemetry save |
+| **INVALID_DATA** | Voltage < 100V or > 300V | WARNING | Inline after telemetry save |
+| **LOW_HEALTH** | Device `health_score` < 30 | INFO | Inline after health recompute |
 
 ### Duplicate Alert Prevention
 
-The system checks for existing unacknowledged alerts of the same type for the same device before creating a new one. This prevents alert storms (e.g., repeated "device offline" alerts every polling cycle).
+Before creating any alert, the system checks if an **unacknowledged** alert of the same `alert_type` already exists for the same `device`. If it does, no new alert is created. This prevents alert storms during sustained fault conditions.
+
+### Telemetry Duplicate Prevention
+
+A **1-minute sliding window** is enforced at ingestion time: if a telemetry record already exists for the same device within ±1 minute of the incoming timestamp, the request is rejected with a 400 error.
 
 ### Efficiency Calculation
 
-- Each zone has a daily `ParkingTarget` with an expected occupancy count
+- Each zone has a daily `ParkingTarget` with an expected `target_occupancy_count`
 - Actual usage = count of `ParkingLog` records with `is_occupied=True` for that zone on that date
 - **Efficiency % = (actual_usage / target_occupancy_count) × 100**
-- These metrics are included in the dashboard summary and the targets API
+- Calculated per-zone and overall in the dashboard summary, and per-target in the targets API
 
 ---
 
 ## Device Health Score
 
-Each device has a health score from **0 to 100**, computed as a weighted sum of four factors:
+Each device has a health score from **0 to 100**, recomputed every time new telemetry is ingested. Computed as a weighted sum of four factors:
 
-| Factor | Weight | Logic |
-|--------|--------|-------|
-| **Recency** | 40% | Full marks if data received within 2 min. Linear decay from 100→0 over 2–60 minutes. 0 if >60 min. |
-| **Voltage Stability** | 20% | 100 if avg voltage is 200–250V; 60 if 150–200V or 250–300V; 20 otherwise |
-| **Power Normality** | 20% | 100 if avg power ≤ 1500W; 50 if ≤ 2250W; 10 otherwise |
+| Factor | Weight | Scoring Logic |
+|--------|--------|---------------|
+| **Recency** | 40% | 100 if last seen ≤ 2 min ago. Linear decay 100→0 over 2–60 min. 0 if > 60 min. |
+| **Voltage Stability** | 20% | 100 if avg voltage 200–250V; 60 if 150–200V or 250–300V; 20 otherwise |
+| **Power Normality** | 20% | 100 if avg power ≤ 1,500W; 50 if ≤ 2,250W; 10 otherwise |
 | **Open Alerts** | 20% | 100 if 0 unacknowledged alerts; 60 if ≤ 2; 20 if > 2 |
 
 **Formula:** `score = recency × 0.40 + voltage × 0.20 + power × 0.20 + alerts × 0.20`
 
-The score is recomputed and persisted every time new telemetry is ingested, ensuring it always reflects the latest device state.
+Voltage and power scores are based on **1-hour rolling averages** of recent telemetry data.
 
 ---
 
 ## Completed Features
 
-### Backend (All Complete)
-- [x] Data models: Facility, Zone, Slot, Device, Telemetry, ParkingLog, Alert, ParkingTarget
-- [x] `POST /api/telemetry/` — device validation, future timestamp rejection, duplicate prevention
+### Backend
+- [x] 8 data models with all PRD-required fields and constraints
+- [x] `POST /api/telemetry/` — device validation, future timestamp rejection, 1-minute duplicate window
 - [x] `POST /api/telemetry/bulk/` — per-record validation, partial success support
-- [x] `POST /api/parking-log/` — occupancy event recording
-- [x] `GET /api/dashboard/summary/` — total events, occupancy, active devices, alerts, efficiency
-- [x] `GET /api/dashboard/hourly/` — hourly parking usage with zone filter
-- [x] Alert detection: device offline, high power, invalid data, low health
+- [x] `POST /api/parking-log/` — occupancy event recording with validation
+- [x] `GET /api/dashboard/summary/` — total events, occupancy, active devices, alerts (by severity), efficiency, zone breakdown — with `facility` filter
+- [x] `GET /api/dashboard/hourly/` — 24-hour array with `occupied_events`, `target` (from ParkingTarget), `last_week` (real data from 7 days ago)
+- [x] Alert detection: 4 types (DEVICE_OFFLINE, HIGH_POWER, INVALID_DATA, LOW_HEALTH)
 - [x] Alert severity levels (INFO / WARNING / CRITICAL)
-- [x] Duplicate alert prevention (dedup on unacknowledged alerts)
-- [x] Alert acknowledgement API
-- [x] Device health scoring (0–100, weighted formula)
+- [x] Duplicate alert prevention (dedup on unacknowledged alerts per device+type)
+- [x] Alert acknowledgement API (`PATCH /api/alerts/<id>/acknowledge/`)
+- [x] Device health scoring (weighted 0–100 formula, recomputed on each telemetry)
 - [x] Parking target & efficiency calculation (per zone, per day)
-- [x] Management command for seeding realistic data (`seed_data`)
-- [x] Django Admin registration for all models
+- [x] Management command `seed_data` for populating realistic sample data
+- [x] Django Admin registration for all 8 models
 - [x] Comprehensive API documentation
 
-### Frontend (All Complete)
-- [x] Dashboard with summary cards (events, occupancy, devices, alerts)
-- [x] Zone-wise performance table with occupancy bars and efficiency indicators
-- [x] Performance chart (Hourly Usage vs Target — Recharts ComposedChart)
-- [x] Live monitoring page with 10-second polling
-- [x] Device status (Online/Offline), health score bars, last-seen timestamps
-- [x] Alert management panel — list, filter by severity/zone, acknowledge, acknowledge all
-- [x] Reports page with 3 tabs: Zone Performance, Device Health, Efficiency vs Target
-- [x] Filters: facility, zone, date range, text search
-- [x] Client-side column sorting (ascending/descending)
-- [x] Export: CSV, Excel (XLSX), PDF — fully wired
-- [x] Status indicators (OK / Warning / Critical) color-coded throughout
-- [x] Responsive dark-themed UI with Tailwind CSS
+### Frontend
+- [x] **Dashboard** — 4 stats cards, zone table, alerts panel, performance chart
+- [x] **Dashboard filters** — date picker, facility dropdown (server-side filtering)
+- [x] **Performance chart** — Hourly Usage (real) vs Hourly Target (real) vs Last Week (real) — all from API
+- [x] **Live Monitoring** — device table with 10-second polling, search, zone/facility filter, active-only toggle
+- [x] **Column sorting** — clickable headers with asc/desc toggle on Monitoring and Reports pages
+- [x] **Alert Management** — list with severity/type/search/acknowledged filters, acknowledge single + all, export dropdown (CSV/Excel/PDF)
+- [x] **Reports** — 3 tabs (Zone Performance, Device Health, Efficiency vs Target), filters, sorting, export
+- [x] **Export** — CSV, Excel (XLSX), PDF across Alerts and Reports pages
+- [x] **Status indicators** — color-coded badges (OK/Warning/Critical) and health score progress bars
+- [x] **Dark-themed UI** — Tailwind CSS with green accent, responsive layout
+- [x] **Live status bar** — pulsing "LIVE MONITORING ACTIVE" indicator, polling interval, system load, last-synced timestamp
 
 ---
 
 ## Incomplete / Partial Features
 
-- **WebSocket real-time updates**: Currently using HTTP polling (10s). WebSocket would reduce latency.
-- **Periodic offline device scan**: `detect_offline_devices()` exists but is not wired to a scheduler (e.g., Celery Beat). It runs on-demand.
+- **WebSocket real-time updates**: Currently using HTTP polling (10s). WebSocket would reduce latency and server load.
+- **Periodic offline device scan**: `detect_offline_devices()` function exists in `services.py` but is not wired to a scheduler (e.g., Celery Beat). It must be called manually or triggered externally.
 - **Authentication**: No auth layer. In production, JWT or session-based auth would be required.
-- **Pagination on frontend**: Backend has DRF pagination configured but frontend lists are capped at 200 items.
+- **Frontend pagination**: Backend limits list results to 200 items. Server-side pagination with page controls is not yet implemented.
 
 ---
 
@@ -301,12 +308,14 @@ The key architectural shift is from **synchronous request-response** to **event-
 | Layer | Technology |
 |-------|-----------|
 | Backend | Django 4.2, Django REST Framework |
-| Frontend | React 19, TypeScript, Vite |
+| Frontend | React 19, TypeScript, Vite 7 |
 | Styling | Tailwind CSS 4 |
-| Charts | Recharts |
-| State/Data | TanStack React Query |
-| Database | PostgreSQL (Neon) |
-| Export | jsPDF, xlsx, file-saver |
+| Charts | Recharts (ComposedChart, Area, Line) |
+| State/Data | TanStack React Query (10s polling) |
+| Database | PostgreSQL (Neon cloud) |
+| Export | jsPDF + jspdf-autotable, xlsx, file-saver |
+| Icons | Lucide React |
+| Dates | date-fns |
 
 ---
 
@@ -315,24 +324,50 @@ The key architectural shift is from **synchronous request-response** to **event-
 ```
 smart-parking-system/
 ├── README.md                    # This file
-├── API_DOCUMENTATION.md         # Detailed API docs
+├── API_DOCUMENTATION.md         # Detailed API docs with examples
 ├── backend/
 │   ├── manage.py
 │   ├── requirements.txt
 │   ├── config/                  # Django settings, URLs, WSGI
+│   │   ├── settings.py
+│   │   ├── urls.py
+│   │   └── wsgi.py
 │   └── parking/                 # Main app
 │       ├── models.py            # 8 data models
-│       ├── serializers.py       # Request/response serializers
-│       ├── views.py             # API views (12 endpoints)
-│       ├── services.py          # Alert detection & health scoring
-│       ├── urls.py              # URL routing
-│       ├── admin.py             # Django admin configuration
-│       └── management/commands/ # seed_data command
+│       ├── serializers.py       # Request/response serializers with validation
+│       ├── views.py             # 12 API views
+│       ├── services.py          # Alert detection & health scoring logic
+│       ├── urls.py              # URL routing (12 patterns)
+│       ├── admin.py             # Django admin registration (all models)
+│       ├── migrations/          # Database migrations
+│       └── management/commands/
+│           └── seed_data.py     # Sample data seeding command
 └── frontend/
     ├── package.json
     ├── vite.config.ts
+    ├── tailwind.config.js
+    ├── index.html
     └── src/
-        ├── pages/               # Dashboard, Monitoring, Alerts, Reports
-        ├── components/          # Reusable UI components
-        └── lib/                 # API client, hooks, services, utilities
+        ├── App.tsx              # Router setup (4 routes)
+        ├── main.tsx             # React entry point
+        ├── pages/
+        │   ├── DashboardPage.tsx   # Stats, zones, alerts, chart
+        │   ├── MonitoringPage.tsx  # Live device monitoring
+        │   ├── AlertsPage.tsx      # Alert management + export
+        │   └── ReportsPage.tsx     # 3-tab reports with export
+        ├── components/
+        │   ├── PerformanceChart.tsx # Recharts hourly chart
+        │   ├── ZoneTable.tsx       # Zone performance table
+        │   ├── AlertsPanel.tsx     # Compact alert panel
+        │   ├── StatsCard.tsx       # Metric card component
+        │   └── StatusBadge.tsx     # Color-coded status badge
+        ├── layouts/
+        │   └── MainLayout.tsx      # Header, nav, status bar, footer
+        └── lib/
+            ├── api.ts              # Axios instance
+            ├── services.ts         # API service functions + types
+            ├── hooks.ts            # React Query hooks (polling)
+            ├── exportUtils.ts      # CSV/Excel/PDF export utilities
+            ├── utils.ts            # Helper functions (cn)
+            └── queryProvider.tsx    # React Query provider
 ```

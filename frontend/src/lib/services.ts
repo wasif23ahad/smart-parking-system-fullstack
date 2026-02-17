@@ -123,8 +123,10 @@ export const acknowledgeAlert = async (alertId: number) => {
     return response.data;
 };
 
-export const getDashboardSummary = async (date?: string) => {
-    const params = date ? { date } : {};
+export const getDashboardSummary = async (date?: string, facility?: number) => {
+    const params: Record<string, string | number> = {};
+    if (date) params.date = date;
+    if (facility) params.facility = facility;
     const response = await api.get<DashboardSummary>('/dashboard/summary/', { params });
     return response.data;
 };
