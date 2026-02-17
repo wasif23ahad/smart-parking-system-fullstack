@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Device, TelemetryData
+from .models import Device, TelemetryData, ParkingLog
 
 
 class TelemetrySerializer(serializers.Serializer):
@@ -97,4 +97,51 @@ class BulkTelemetrySerializer(serializers.Serializer):
                 })
 
         return {'created': created, 'errors': errors}
+
+
+class ParkingLogSerializer(serializers.Serializer):
+    """
+    Validates and creates a parking occupancy event.
+
+    Validation rules:
+    - device_code must exist
+    - timestamp must not be in the future
+    """
+    device_code = serializers.CharField(max_length=50)
+    is_occupied = serializers.BooleanField()
+    timestamp = serializers.DateTimeField()
+
+    def validate_device_code(self, value):
+        try:
+            device = Device.objects.get(device_code=value, is_active=True)
+        except Device.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Device with code '{value}' does not exist or is inactive."
+            )
+        self._device = device
+        return value
+
+    def validate_timestamp(self, value):
+        if value > timezone.now():
+            raise serializers.ValidationError('Timestamp cannot be in the future.')
+        return value
+
+    def create(self, validated_data):
+        device = self._device
+        log = ParkingLog.objects.create(
+            device=device,
+            is_occupied=validated_data['is_occupied'],
+            timestamp=validated_data['timestamp'],
+        )
+        return log
+
+
+class ParkingLogListSerializer(serializers.ModelSerializer):
+    """Read-only serializer for listing parking logs."""
+    device_code = serializers.CharField(source='device.device_code', read_only=True)
+    zone_name = serializers.CharField(source='device.slot.zone.name', read_only=True)
+
+    class Meta:
+        model = ParkingLog
+        fields = ['id', 'device_code', 'zone_name', 'is_occupied', 'timestamp', 'received_at']
 
