@@ -1,6 +1,6 @@
 # 🚗 Smart Car Parking Monitoring & Alert System
 
-A full-stack monitoring platform for commercial parking facilities. Built with **Django + DRF** (Backend) and **React + Vite** (Frontend).
+A full-stack monitoring platform for commercial parking facilities. Built with **Django + DRF** (Backend) and **React + TypeScript + Tailwind CSS** (Frontend).
 
 ## Overview
 
@@ -11,9 +11,11 @@ This system simulates a real-world parking facility where multiple parking zones
 | Layer | Technology |
 |-------|-----------|
 | Backend | Django 4.2, Django REST Framework |
-| Frontend | React 18, Vite, Recharts |
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS |
+| Charts | Recharts |
+| Data Fetching | Axios, React Query (@tanstack/react-query) |
 | Database | SQLite (development) |
-| Styling | Vanilla CSS |
 
 ## Project Structure
 
@@ -30,12 +32,12 @@ smart-parking-system/
 │   │   └── urls.py           # URL routing
 │   ├── manage.py
 │   └── requirements.txt
-├── frontend/                 # React app (Vite)
+├── frontend/                 # React + TypeScript app (Vite)
 │   ├── src/
 │   │   ├── components/       # Reusable UI components
 │   │   ├── pages/            # Page components
-│   │   ├── services/         # API client
-│   │   └── App.jsx
+│   │   ├── services/         # API client (Axios + React Query)
+│   │   └── App.tsx
 │   └── package.json
 └── README.md
 ```
