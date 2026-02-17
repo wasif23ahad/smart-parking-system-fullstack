@@ -1,17 +1,5 @@
-"""
-Data Models for Smart Car Parking Monitoring & Alert System.
-
-Commit B2: Core models — ParkingFacility, ParkingZone, ParkingSlot.
-
-Assumptions & Thresholds (will be expanded in later commits):
-─────────────────────────────────────────────────────────────
-• power_consumption = voltage × current × power_factor (computed on save)
-• High power threshold: > 1500W → WARNING alert
-• Device offline: no telemetry for > 2 minutes → CRITICAL alert
-• Invalid data: voltage outside 100–300V, or power_factor outside 0.0–1.0
-• Device health score: 0–100 (see services.py for formula)
-"""
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class ParkingFacility(models.Model):
@@ -71,3 +59,55 @@ class ParkingSlot(models.Model):
 
     def __str__(self):
         return f"{self.zone.name} - Slot {self.slot_number}"
+
+
+class Device(models.Model):
+    """A sensor/controller device attached to a parking slot."""
+    slot = models.OneToOneField(
+        ParkingSlot, on_delete=models.CASCADE, related_name='device'
+    )
+    device_code = models.CharField(max_length=50, unique=True, db_index=True)
+    is_active = models.BooleanField(default=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    health_score = models.IntegerField(
+        default=100,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    installed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['device_code']
+
+    def __str__(self):
+        return self.device_code
+
+
+class TelemetryData(models.Model):
+    """Time-series telemetry data received from devices."""
+    device = models.ForeignKey(
+        Device, on_delete=models.CASCADE, related_name='telemetry'
+    )
+    voltage = models.FloatField(help_text="Voltage in Volts")
+    current = models.FloatField(help_text="Current in Amperes")
+    power_factor = models.FloatField(help_text="Power factor (0.0 to 1.0)")
+    power_consumption = models.FloatField(
+        help_text="Computed: voltage × current × power_factor (Watts)",
+        editable=False,
+        default=0
+    )
+    timestamp = models.DateTimeField(db_index=True)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        unique_together = ['device', 'timestamp']
+        verbose_name_plural = 'Telemetry Data'
+
+    def save(self, *args, **kwargs):
+        """Compute power consumption before saving."""
+        self.power_consumption = round(self.voltage * self.current * self.power_factor, 2)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.device.device_code} @ {self.timestamp}"
+
