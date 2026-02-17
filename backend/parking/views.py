@@ -7,10 +7,11 @@ from .serializers import (
     ParkingLogSerializer, ParkingLogListSerializer,
     AlertSerializer,
     FacilitySerializer, ZoneSerializer, DeviceSerializer,
+    ParkingTargetSerializer,
 )
 from .models import (
     ParkingLog, Alert, ParkingFacility, ParkingZone, Device,
-    ParkingSlot, TelemetryData,
+    ParkingSlot, TelemetryData, ParkingTarget,
 )
 
 
@@ -341,3 +342,30 @@ class DashboardHourlyView(APIView):
             'zone_id': zone_id,
             'hourly': data,
         })
+
+
+
+class TargetListView(APIView):
+    """
+    GET /api/targets/?date=YYYY-MM-DD
+    List parking targets and efficiency metrics for a specific date.
+    """
+
+    def get(self, request):
+        import datetime
+        date_str = request.query_params.get('date')
+
+        if not date_str:
+            date_str = str(datetime.date.today())
+
+        try:
+            target_date = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            return Response(
+                {'error': 'Invalid date format. Use YYYY-MM-DD.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        targets = ParkingTarget.objects.select_related('zone').filter(date=target_date)
+        serializer = ParkingTargetSerializer(targets, many=True)
+        return Response(serializer.data)

@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from .models import (
     Device, TelemetryData, ParkingLog, Alert,
-    ParkingFacility, ParkingZone, ParkingSlot,
+    ParkingFacility, ParkingZone, ParkingSlot, ParkingTarget,
 )
 
 
@@ -216,4 +216,32 @@ class DeviceSerializer(serializers.ModelSerializer):
             'facility_name', 'is_active', 'health_score', 'last_seen_at',
             'installed_at',
         ]
+
+
+class ParkingTargetSerializer(serializers.ModelSerializer):
+    zone_name = serializers.CharField(source='zone.name', read_only=True)
+    actual_usage = serializers.SerializerMethodField()
+    efficiency = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ParkingTarget
+        fields = [
+            'id', 'zone_name', 'date', 'target_occupancy_count',
+            'actual_usage', 'efficiency',
+        ]
+
+    def get_actual_usage(self, obj):
+        """Count unique occupied events for the zone on the target date."""
+        return ParkingLog.objects.filter(
+            device__slot__zone=obj.zone,
+            timestamp__date=obj.date,
+            is_occupied=True,
+        ).count()
+
+    def get_efficiency(self, obj):
+        """Efficiency = (actual_usage / target_occupancy_count) * 100."""
+        actual = self.get_actual_usage(obj)
+        if obj.target_occupancy_count > 0:
+            return round((actual / obj.target_occupancy_count) * 100, 1)
+        return 0.0
 

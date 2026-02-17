@@ -14,4 +14,5 @@ urlpatterns = [
     path('devices/', views.DeviceListView.as_view(), name='device-list'),
     path('dashboard/summary/', views.DashboardSummaryView.as_view(), name='dashboard-summary'),
     path('dashboard/hourly/', views.DashboardHourlyView.as_view(), name='dashboard-hourly'),
+    path('targets/', views.TargetListView.as_view(), name='target-list'),
 ]
