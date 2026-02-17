@@ -27,6 +27,7 @@ class TelemetryCreateView(APIView):
                     'power_consumption': telemetry.power_consumption,
                     'timestamp': telemetry.timestamp,
                     'alerts_triggered': getattr(telemetry, 'alerts_triggered', []),
+                    'health_score': getattr(telemetry, 'health_score', None),
                 },
                 status=status.HTTP_201_CREATED,
             )

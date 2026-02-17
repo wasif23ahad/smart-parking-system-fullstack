@@ -60,8 +60,11 @@ class TelemetrySerializer(serializers.Serializer):
         device.save(update_fields=['last_seen_at'])
 
         # Run alert detections
-        from .services import run_all_detections
+        from .services import run_all_detections, compute_device_health
         telemetry.alerts_triggered = run_all_detections(telemetry)
+
+        # Update device health score
+        telemetry.health_score = compute_device_health(device)
 
         return telemetry
 
