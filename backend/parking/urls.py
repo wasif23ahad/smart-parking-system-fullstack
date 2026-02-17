@@ -7,4 +7,6 @@ urlpatterns = [
     path('telemetry/bulk/', views.BulkTelemetryCreateView.as_view(), name='telemetry-bulk'),
     path('parking-log/', views.ParkingLogCreateView.as_view(), name='parking-log-create'),
     path('parking-logs/', views.ParkingLogListView.as_view(), name='parking-log-list'),
+    path('alerts/', views.AlertListView.as_view(), name='alert-list'),
+    path('alerts/<int:pk>/acknowledge/', views.AlertAcknowledgeView.as_view(), name='alert-acknowledge'),
 ]

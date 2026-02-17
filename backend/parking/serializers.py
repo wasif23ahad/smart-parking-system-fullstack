@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Device, TelemetryData, ParkingLog
+from .models import Device, TelemetryData, ParkingLog, Alert
 
 
 class TelemetrySerializer(serializers.Serializer):
@@ -151,4 +151,17 @@ class ParkingLogListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ParkingLog
         fields = ['id', 'device_code', 'zone_name', 'is_occupied', 'timestamp', 'received_at']
+
+
+class AlertSerializer(serializers.ModelSerializer):
+    """Read-only serializer for alert listing."""
+    device_code = serializers.CharField(source='device.device_code', read_only=True, default=None)
+    zone_name = serializers.CharField(source='zone.name', read_only=True, default=None)
+
+    class Meta:
+        model = Alert
+        fields = [
+            'id', 'device_code', 'zone_name', 'alert_type', 'severity',
+            'message', 'is_acknowledged', 'acknowledged_at', 'created_at',
+        ]
 

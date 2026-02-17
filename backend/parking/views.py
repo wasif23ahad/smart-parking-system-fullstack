@@ -5,8 +5,9 @@ from rest_framework.views import APIView
 from .serializers import (
     TelemetrySerializer, BulkTelemetrySerializer,
     ParkingLogSerializer, ParkingLogListSerializer,
+    AlertSerializer,
 )
-from .models import ParkingLog
+from .models import ParkingLog, Alert
 
 
 class TelemetryCreateView(APIView):
@@ -113,3 +114,63 @@ class ParkingLogListView(APIView):
         logs = logs[:200]  # Limit results
         serializer = ParkingLogListSerializer(logs, many=True)
         return Response(serializer.data)
+
+
+class AlertListView(APIView):
+    """
+    GET /api/alerts/
+    List alerts with optional filters: severity, alert_type, is_acknowledged.
+    """
+
+    def get(self, request):
+        alerts = Alert.objects.select_related('device', 'zone').all()
+
+        severity = request.query_params.get('severity')
+        if severity:
+            alerts = alerts.filter(severity=severity.upper())
+
+        alert_type = request.query_params.get('type')
+        if alert_type:
+            alerts = alerts.filter(alert_type=alert_type.upper())
+
+        acknowledged = request.query_params.get('acknowledged')
+        if acknowledged is not None:
+            alerts = alerts.filter(is_acknowledged=acknowledged.lower() == 'true')
+
+        alerts = alerts[:200]
+        serializer = AlertSerializer(alerts, many=True)
+        return Response(serializer.data)
+
+
+class AlertAcknowledgeView(APIView):
+    """
+    PATCH /api/alerts/<id>/acknowledge/
+    Mark a single alert as acknowledged.
+    """
+
+    def patch(self, request, pk):
+        try:
+            alert = Alert.objects.get(pk=pk)
+        except Alert.DoesNotExist:
+            return Response(
+                {'status': 'error', 'message': 'Alert not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if alert.is_acknowledged:
+            return Response(
+                {'status': 'info', 'message': 'Alert already acknowledged.'},
+                status=status.HTTP_200_OK,
+            )
+
+        from django.utils import timezone as tz
+        alert.is_acknowledged = True
+        alert.acknowledged_at = tz.now()
+        alert.save(update_fields=['is_acknowledged', 'acknowledged_at'])
+
+        return Response({
+            'status': 'success',
+            'message': 'Alert acknowledged.',
+            'alert_id': alert.id,
+            'acknowledged_at': alert.acknowledged_at,
+        })
