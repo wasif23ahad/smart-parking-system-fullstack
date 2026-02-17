@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAlerts, useAcknowledgeAlert, useZones } from '../lib/hooks';
 import type { Alert, Zone } from '../lib/services';
-import { CheckCircle2, Download, Search, Clock, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import { CheckCircle2, Download, Search, Clock, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Zap, FileText, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
+import { exportToCSV, exportToExcel, exportToPDF } from '../lib/exportUtils';
 
 export default function AlertsPage() {
     const [severityFilter, setSeverityFilter] = useState<string>('');
@@ -11,7 +12,40 @@ export default function AlertsPage() {
     const [timeFilter, setTimeFilter] = useState<string>('24h');
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const exportRef = useRef<HTMLDivElement>(null);
     const itemsPerPage = 6;
+
+    // Close export menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleExportAlerts = (type: 'csv' | 'excel' | 'pdf') => {
+        const timestamp = format(new Date(), 'yyyyMMdd_HHmm');
+        const data = {
+            title: 'Active Alerts Report',
+            headers: ['Timestamp', 'Device Code', 'Zone', 'Severity', 'Type', 'Message'],
+            rows: filteredAlerts.map((a: Alert) => [
+                format(new Date(a.created_at), 'yyyy-MM-dd HH:mm:ss'),
+                a.device_code || 'N/A',
+                a.zone_name || 'Unknown',
+                a.severity,
+                a.alert_type,
+                a.message,
+            ]),
+        };
+        if (type === 'csv') exportToCSV(data, `alerts_${timestamp}`);
+        else if (type === 'excel') exportToExcel(data, `alerts_${timestamp}`);
+        else exportToPDF(data, `alerts_${timestamp}`);
+        setShowExportMenu(false);
+    };
 
     const { data: alerts, isLoading } = useAlerts({
         severity: severityFilter || undefined,
@@ -106,10 +140,28 @@ export default function AlertsPage() {
                         <CheckCircle2 className="w-4 h-4" />
                         Acknowledge All
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors text-sm font-medium">
-                        <Download className="w-4 h-4" />
-                        Export
-                    </button>
+                    <div className="relative" ref={exportRef}>
+                        <button
+                            onClick={() => setShowExportMenu(prev => !prev)}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors text-sm font-medium"
+                        >
+                            <Download className="w-4 h-4" />
+                            Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="absolute right-0 mt-2 w-40 bg-[#111a11] border border-[#1f3320] rounded-lg shadow-xl z-50 overflow-hidden">
+                                <button onClick={() => handleExportAlerts('csv')} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-[#1a2a1a] hover:text-green-400 transition-colors">
+                                    <Download className="w-4 h-4" /> CSV
+                                </button>
+                                <button onClick={() => handleExportAlerts('excel')} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-[#1a2a1a] hover:text-green-400 transition-colors">
+                                    <FileSpreadsheet className="w-4 h-4" /> Excel
+                                </button>
+                                <button onClick={() => handleExportAlerts('pdf')} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-[#1a2a1a] hover:text-green-400 transition-colors">
+                                    <FileText className="w-4 h-4" /> PDF
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
